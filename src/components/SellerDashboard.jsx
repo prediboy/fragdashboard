@@ -552,7 +552,7 @@ export default function SellerDashboard({ isDark, onToggleTheme }) {
                       <th className="py-3 px-4 font-semibold text-right text-indigo-500 dark:text-indigo-400">Card Opens</th>
                       <th className="py-3 px-4 font-semibold text-right text-emerald-600 dark:text-emerald-400">WhatsApp Buy Clicks</th>
                       <th className="py-3 px-4 font-semibold text-right">Search-to-Buy Rate</th>
-                      <th className="py-3 px-4 font-semibold">Demand Signal</th>
+                      <th className="py-3 px-4 font-semibold">High Conversion Rate</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
@@ -589,19 +589,13 @@ export default function SellerDashboard({ isDark, onToggleTheme }) {
                               </span>
                             </td>
                             <td className="py-3 px-4">
-                              {item.unmetDemand ? (
-                                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-md border border-amber-200 dark:border-amber-800/50">
-                                  <AlertCircle className="w-3 h-3 text-amber-500" />
-                                  Unmet Demand / Low Stock
-                                </span>
-                              ) : item.conversionRate >= 50 ? (
-                                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800/50">
-                                  <Flame className="w-3 h-3 text-emerald-500" />
-                                  High Conversion Target
+                              {item.conversionRate >= 40 ? (
+                                <span className="inline-flex items-center text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800/50">
+                                  Yes
                                 </span>
                               ) : (
-                                <span className="text-[11px] text-slate-400">
-                                  Regular Demand
+                                <span className="inline-flex items-center text-xs font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/60 px-2.5 py-0.5 rounded-md">
+                                  No
                                 </span>
                               )}
                             </td>
@@ -632,7 +626,7 @@ export default function SellerDashboard({ isDark, onToggleTheme }) {
                       <th className="py-3 px-4 font-semibold text-right text-emerald-600 dark:text-emerald-400">WhatsApp Buy Leads</th>
                       <th className="py-3 px-4 font-semibold text-right">Market Share</th>
                       <th className="py-3 px-4 font-semibold text-right">Avg Clicked Price</th>
-                      <th className="py-3 px-4 font-semibold">Demand Signal</th>
+                      <th className="py-3 px-4 font-semibold">High Conversion Rate</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
@@ -667,19 +661,13 @@ export default function SellerDashboard({ isDark, onToggleTheme }) {
                               {item.avgPrice ? `₹${item.avgPrice.toLocaleString()}` : '—'}
                             </td>
                             <td className="py-3 px-4">
-                              {globalIdx <= 3 ? (
-                                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-md border border-amber-200 dark:border-amber-800/50">
-                                  <Flame className="w-3 h-3 text-amber-500" />
-                                  Top Seller (#1-3)
-                                </span>
-                              ) : item.clicks >= 6 ? (
-                                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-cyan-600 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-950/40 px-2 py-0.5 rounded-md border border-cyan-200 dark:border-cyan-800/50">
-                                  <TrendingUp className="w-3 h-3 text-cyan-500" />
-                                  Fast Mover
+                              {item.clicks >= 10 || (item.viewToBuyRate && Number(item.viewToBuyRate) >= 20) ? (
+                                <span className="inline-flex items-center text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800/50">
+                                  Yes
                                 </span>
                               ) : (
-                                <span className="text-[11px] text-slate-400">
-                                  Steady Interest
+                                <span className="inline-flex items-center text-xs font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/60 px-2.5 py-0.5 rounded-md">
+                                  No
                                 </span>
                               )}
                             </td>
@@ -710,7 +698,7 @@ export default function SellerDashboard({ isDark, onToggleTheme }) {
                       <th className="py-3 px-4 font-semibold text-right text-emerald-600 dark:text-emerald-400">WhatsApp Decant Clicks</th>
                       <th className="py-3 px-4 font-semibold text-right">Decant Market Share</th>
                       <th className="py-3 px-4 font-semibold text-right">Avg Clicked Price</th>
-                      <th className="py-3 px-4 font-semibold">Trial Signal</th>
+                      <th className="py-3 px-4 font-semibold">High Conversion Rate</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
@@ -744,14 +732,13 @@ export default function SellerDashboard({ isDark, onToggleTheme }) {
                               {item.avgPrice ? `₹${item.avgPrice.toLocaleString()}` : '—'}
                             </td>
                             <td className="py-3 px-4">
-                              {globalIdx <= 2 ? (
-                                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-md border border-amber-200 dark:border-amber-800/50">
-                                  <Sparkles className="w-3 h-3 text-amber-500" />
-                                  High Sample Demand
+                              {item.clicks >= 5 || (item.viewToBuyRate && Number(item.viewToBuyRate) >= 20) ? (
+                                <span className="inline-flex items-center text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800/50">
+                                  Yes
                                 </span>
                               ) : (
-                                <span className="text-[11px] text-slate-400">
-                                  Steady Decant Trials
+                                <span className="inline-flex items-center text-xs font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/60 px-2.5 py-0.5 rounded-md">
+                                  No
                                 </span>
                               )}
                             </td>
