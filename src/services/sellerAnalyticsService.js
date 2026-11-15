@@ -319,7 +319,63 @@ export async function getSellerDemandMetrics({
     })
     .sort((a, b) => b.clicks !== a.clicks ? b.clicks - a.clicks : b.cardViews - a.cardViews);
 
-  // 5. Daily Search & Click Velocity
+  // 5. Top Clicked Cards (Ranked by Card Opens / Detail Views)
+  const cardClickMap = new Map();
+  for (const cv of cardViews) {
+    const rawKey = cv.brand && !cv.name.toLowerCase().includes(cv.brand.toLowerCase())
+      ? `${cv.brand} ${cv.name}`
+      : cv.name;
+
+    if (!cardClickMap.has(rawKey)) {
+      cardClickMap.set(rawKey, {
+        name: rawKey,
+        brand: cv.brand,
+        format: cv.format || 'bottle',
+        cardViews: 0,
+        uniqueShoppers: new Set(),
+        whatsappClicks: 0,
+        prices: []
+      });
+    }
+    const entry = cardClickMap.get(rawKey);
+    entry.cardViews++;
+    entry.uniqueShoppers.add(cv.session);
+    if (cv.price) entry.prices.push(cv.price);
+  }
+
+  // Correlate with inbound whatsapp buy leads
+  for (const c of [...bottleClicks, ...decantClicks]) {
+    const rawKey = c.brand && !c.name.toLowerCase().includes(c.brand.toLowerCase())
+      ? `${c.brand} ${c.name}`
+      : c.name;
+    if (cardClickMap.has(rawKey)) {
+      cardClickMap.get(rawKey).whatsappClicks++;
+    }
+  }
+
+  const topCardClicks = Array.from(cardClickMap.values())
+    .map(c => {
+      const avgPrice = c.prices.length > 0
+        ? Math.round(c.prices.reduce((acc, curr) => acc + curr, 0) / c.prices.length)
+        : null;
+      const conversionRate = c.cardViews > 0
+        ? ((c.whatsappClicks / c.cardViews) * 100).toFixed(1)
+        : '0.0';
+      return {
+        name: c.name,
+        brand: c.brand,
+        format: c.format,
+        cardViews: c.cardViews,
+        uniqueShoppers: c.uniqueShoppers.size,
+        whatsappClicks: c.whatsappClicks,
+        conversionRate: parseFloat(conversionRate),
+        avgPrice,
+        share: totalCardViews > 0 ? ((c.cardViews / totalCardViews) * 100).toFixed(1) : '0.0'
+      };
+    })
+    .sort((a, b) => b.cardViews !== a.cardViews ? b.cardViews - a.cardViews : b.whatsappClicks - a.whatsappClicks);
+
+  // 6. Daily Search & Click Velocity
   const dayMap = {};
   const addDay = (dateStr, type) => {
     if (!dateStr) return;
@@ -356,6 +412,8 @@ export async function getSellerDemandMetrics({
     searchInsights,
     topBottles,
     topDecants,
+    topCardClicks,
+    top10Cards: topCardClicks.slice(0, 10),
     dailyVelocity
   };
 }

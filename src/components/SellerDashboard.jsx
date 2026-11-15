@@ -112,8 +112,21 @@ export default function SellerDashboard({ isDark, onToggleTheme }) {
     return metrics.topDecants.filter(d => d.name.toLowerCase().includes(q));
   }, [metrics?.topDecants, searchFilter]);
 
+  const filteredCards = useMemo(() => {
+    if (!metrics?.topCardClicks) return [];
+    if (!searchFilter.trim()) return metrics.topCardClicks;
+    const q = searchFilter.toLowerCase().trim();
+    return metrics.topCardClicks.filter(c => c.name.toLowerCase().includes(q));
+  }, [metrics?.topCardClicks, searchFilter]);
+
   // Paginated slices
-  const activeDataset = activeTab === 'searches' ? filteredSearches : activeTab === 'bottles' ? filteredBottles : filteredDecants;
+  const activeDataset = activeTab === 'searches' 
+    ? filteredSearches 
+    : activeTab === 'cards'
+    ? filteredCards
+    : activeTab === 'bottles' 
+    ? filteredBottles 
+    : filteredDecants;
   const totalItems = activeDataset.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
   
@@ -432,13 +445,103 @@ export default function SellerDashboard({ isDark, onToggleTheme }) {
           )}
         </div>
 
-        {/* 3. NAVIGATION TABS & IN-TABLE FILTER */}
+        {/* 3. TOP 10 MOST CLICKED CARDS SHOWCASE */}
+        {metrics?.top10Cards && metrics.top10Cards.length > 0 && (
+          <div className="p-5 rounded-2xl border border-indigo-500/30 bg-white dark:bg-slate-900/60 shadow-2xs">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+              <div>
+                <h3 className="font-heading font-bold text-sm sm:text-base text-slate-900 dark:text-white flex items-center gap-2">
+                  <Eye className="w-4 h-4 text-indigo-400" />
+                  <span>Top 10 Most Clicked Cards (Buyer Exploration)</span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-indigo-500/10 text-indigo-500 dark:text-indigo-400 border border-indigo-500/20">
+                    {metrics.totalCardViews} Total Opens
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">
+                  Top perfumes shoppers are actively tapping to view notes, details, and compare seller rates
+                </p>
+              </div>
+
+              <button
+                onClick={() => { setActiveTab('cards'); setSearchFilter(''); }}
+                className="text-xs font-mono font-bold text-indigo-500 dark:text-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-300 flex items-center gap-1 transition-colors"
+              >
+                <span>View All ({metrics?.topCardClicks?.length || 0}) Card Clicks →</span>
+              </button>
+            </div>
+
+            {/* Top 10 Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs font-mono">
+                <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
+                  <tr>
+                    <th className="py-2.5 px-3 font-semibold">Rank</th>
+                    <th className="py-2.5 px-3 font-semibold">Fragrance</th>
+                    <th className="py-2.5 px-3 font-semibold">Format</th>
+                    <th className="py-2.5 px-3 font-semibold text-right text-indigo-500 dark:text-indigo-400">Card Opens / Views</th>
+                    <th className="py-2.5 px-3 font-semibold text-right text-emerald-600 dark:text-emerald-400">WhatsApp Buy Leads</th>
+                    <th className="py-2.5 px-3 font-semibold text-right">Card-to-Buy Rate</th>
+                    <th className="py-2.5 px-3 font-semibold text-right">Avg Price</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                  {metrics.top10Cards.map((item, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/30 transition-colors">
+                      <td className="py-2.5 px-3 text-slate-400 font-bold">
+                        <span className={`w-5 h-5 rounded-md inline-flex items-center justify-center font-bold text-[11px] ${
+                          idx === 0 ? 'bg-amber-500/20 text-amber-500 border border-amber-500/40' :
+                          idx === 1 ? 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200' :
+                          idx === 2 ? 'bg-amber-700/20 text-amber-700 dark:text-amber-300' :
+                          'bg-slate-100 dark:bg-slate-800 text-slate-400'
+                        }`}>
+                          {idx + 1}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 font-heading font-bold text-slate-800 dark:text-slate-200 text-sm">
+                        {item.name}
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                          item.format.includes('decant')
+                            ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-500/30'
+                            : 'bg-cyan-50 dark:bg-cyan-950/40 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30'
+                        }`}>
+                          {item.format.includes('decant') ? 'Decant' : 'Full Bottle'}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-extrabold text-indigo-500 dark:text-indigo-400 text-sm">
+                        {item.cardViews} <span className="text-[10px] text-slate-400 font-normal">({item.share}%)</span>
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-extrabold text-emerald-600 dark:text-emerald-400">
+                        {item.whatsappClicks > 0 ? `${item.whatsappClicks} clicks` : '—'}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-bold text-slate-700 dark:text-slate-300">
+                        {item.conversionRate > 0 ? (
+                          <span className="px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-bold">
+                            {item.conversionRate}%
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">0.0%</span>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3 text-right text-slate-600 dark:text-slate-300">
+                        {item.avgPrice ? `₹${item.avgPrice.toLocaleString()}` : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* 4. NAVIGATION TABS & IN-TABLE FILTER */}
         <div className="space-y-4">
           
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
             
             {/* View switcher tabs */}
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={() => { setActiveTab('searches'); setSearchFilter(''); }}
                 className={`flex items-center gap-2 px-3.5 py-2 rounded-xl font-mono text-xs font-bold transition-all ${
@@ -448,7 +551,19 @@ export default function SellerDashboard({ isDark, onToggleTheme }) {
                 }`}
               >
                 <Search className="w-3.5 h-3.5" />
-                <span>Search Terms & WhatsApp Conversion ({metrics?.searchInsights?.length || 0})</span>
+                <span>Search Terms & Conversion ({metrics?.searchInsights?.length || 0})</span>
+              </button>
+
+              <button
+                onClick={() => { setActiveTab('cards'); setSearchFilter(''); }}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl font-mono text-xs font-bold transition-all ${
+                  activeTab === 'cards'
+                    ? 'bg-cyan-600 text-white shadow-xs'
+                    : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-800 hover:border-cyan-400'
+                }`}
+              >
+                <Eye className="w-3.5 h-3.5" />
+                <span>Top Card Clicks ({metrics?.topCardClicks?.length || 0})</span>
               </button>
 
               <button
@@ -484,6 +599,8 @@ export default function SellerDashboard({ isDark, onToggleTheme }) {
                 placeholder={
                   activeTab === 'searches'
                     ? "Filter search terms..."
+                    : activeTab === 'cards'
+                    ? "Filter clicked cards..."
                     : activeTab === 'bottles'
                     ? "Filter bottles or brands..."
                     : "Filter decants..."
@@ -504,16 +621,19 @@ export default function SellerDashboard({ isDark, onToggleTheme }) {
               <div>
                 <h4 className="font-heading font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
                   {activeTab === 'searches' && <Search className="w-4 h-4 text-cyan-500" />}
+                  {activeTab === 'cards' && <Eye className="w-4 h-4 text-indigo-400" />}
                   {activeTab === 'bottles' && <Package className="w-4 h-4 text-cyan-500" />}
                   {activeTab === 'decants' && <FlaskConical className="w-4 h-4 text-amber-500" />}
                   <span>
                     {activeTab === 'searches' && "Search Terms, Card Opens & WhatsApp Buy Intent"}
+                    {activeTab === 'cards' && "All Clicked Fragrance Cards Ranked by Buyer Opens"}
                     {activeTab === 'bottles' && "Full Bottles Ranked by Customer WhatsApp Inquiries"}
                     {activeTab === 'decants' && "Decants Ranked by Customer WhatsApp Inquiries"}
                   </span>
                 </h4>
                 <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">
                   {activeTab === 'searches' && "Tracks user searches, card detail views, and conversion to WhatsApp buy clicks"}
+                  {activeTab === 'cards' && "Which specific perfume cards shoppers are exploring in detail across community inventory"}
                   {activeTab === 'bottles' && "Which specific retail bottles generate highest buy intent across community inventory"}
                   {activeTab === 'decants' && "Which fragrances buyers want to sample in 5ml/10ml/30ml decants"}
                 </p>
@@ -606,6 +726,100 @@ export default function SellerDashboard({ isDark, onToggleTheme }) {
                       <tr>
                         <td colSpan={8} className="py-12 text-center text-slate-400">
                           No matching search queries found.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* TAB: TOP CLICKED CARDS */}
+            {activeTab === 'cards' && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs font-mono">
+                  <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
+                    <tr>
+                      <th className="py-3 px-4 font-semibold">Rank</th>
+                      <th className="py-3 px-4 font-semibold">Perfume Name</th>
+                      <th className="py-3 px-4 font-semibold">Format</th>
+                      <th className="py-3 px-4 font-semibold text-right text-indigo-500 dark:text-indigo-400">Card Opens / Views</th>
+                      <th className="py-3 px-4 font-semibold text-right">Unique Shoppers</th>
+                      <th className="py-3 px-4 font-semibold text-right text-emerald-600 dark:text-emerald-400">WhatsApp Buy Leads</th>
+                      <th className="py-3 px-4 font-semibold text-right">Card-to-Buy Rate</th>
+                      <th className="py-3 px-4 font-semibold text-right">Avg Price</th>
+                      <th className="py-3 px-4 font-semibold">Demand Level</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                    {paginatedData.length > 0 ? (
+                      paginatedData.map((item, idx) => {
+                        const globalIdx = (currentPage - 1) * pageSize + idx + 1;
+                        return (
+                          <tr key={idx} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/30 transition-colors">
+                            <td className="py-3 px-4 text-slate-400 font-bold">
+                              <span className={`w-5 h-5 rounded-md inline-flex items-center justify-center font-bold text-[11px] ${
+                                globalIdx === 1 ? 'bg-amber-500/20 text-amber-500 border border-amber-500/40' :
+                                globalIdx === 2 ? 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200' :
+                                globalIdx === 3 ? 'bg-amber-700/20 text-amber-700 dark:text-amber-300' :
+                                'bg-slate-100 dark:bg-slate-800 text-slate-400'
+                              }`}>
+                                {globalIdx}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 font-heading font-bold text-slate-800 dark:text-slate-200 text-sm">
+                              {item.name}
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                                item.format.includes('decant')
+                                  ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-500/30'
+                                  : 'bg-cyan-50 dark:bg-cyan-950/40 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30'
+                              }`}>
+                                {item.format.includes('decant') ? 'Decant' : 'Full Bottle'}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-right font-extrabold text-indigo-500 dark:text-indigo-400 text-sm">
+                              {item.cardViews} <span className="text-[10px] text-slate-400 font-normal">({item.share}%)</span>
+                            </td>
+                            <td className="py-3 px-4 text-right text-slate-600 dark:text-slate-300">
+                              {item.uniqueShoppers}
+                            </td>
+                            <td className="py-3 px-4 text-right font-extrabold text-emerald-600 dark:text-emerald-400 text-sm">
+                              {item.whatsappClicks > 0 ? `${item.whatsappClicks} leads` : '—'}
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              <span className={`px-2 py-0.5 rounded-md font-bold ${
+                                item.conversionRate >= 20
+                                  ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                                  : item.conversionRate > 0
+                                  ? 'bg-cyan-50 dark:bg-cyan-950/60 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800'
+                                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                              }`}>
+                                {item.conversionRate}%
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-right text-slate-600 dark:text-slate-300">
+                              {item.avgPrice ? `₹${item.avgPrice.toLocaleString()}` : '—'}
+                            </td>
+                            <td className="py-3 px-4">
+                              {item.cardViews >= 3 ? (
+                                <span className="inline-flex items-center text-xs font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2.5 py-0.5 rounded-md border border-amber-200 dark:border-amber-800/50">
+                                  Trending
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center text-xs font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/60 px-2.5 py-0.5 rounded-md">
+                                  Normal
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={9} className="py-12 text-center text-slate-400">
+                          No matching card clicks recorded for this period.
                         </td>
                       </tr>
                     )}
