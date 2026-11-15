@@ -1,18 +1,22 @@
 /**
  * sellerAnalyticsService.js
  * 
- * Aggregates live platform telemetry from Supabase for FragDashboard.
- * Filters by Date Range (Preset or Custom) and Seller ID.
+ * Aggregates live buyer search demand and WhatsApp conversion telemetry for sellers.
+ * Focuses strictly on:
+ * - What people are searching for & their WhatsApp click conversion
+ * - Decant vs Full Bottle market demand split
+ * - Which specific bottles buyers are clicking on most
+ * - Which specific decants buyers are clicking on most
  */
 
 import { supabase } from '../lib/supabaseClient.js';
 
 let cachedAllLogs = null;
 let lastFetchTime = 0;
-const CACHE_TTL_MS = 60000; // 1 minute in-memory cache for fast tab switching
+const CACHE_TTL_MS = 45000; // 45s in-memory cache
 
 /**
- * Fetch telemetry rows from Supabase (paginated to bypass 1,000 row limits)
+ * Fetch all raw telemetry rows (paginated to bypass Supabase 1,000-row limit)
  */
 async function fetchTelemetryRows(forceRefresh = false) {
   const now = Date.now();
@@ -26,7 +30,7 @@ async function fetchTelemetryRows(forceRefresh = false) {
 
   try {
     if (!supabase) {
-      console.warn('[Seller Analytics] Supabase client is null or unconfigured.');
+      console.warn('[FragDashboard] Supabase client is unconfigured.');
       return [];
     }
 
@@ -41,7 +45,6 @@ async function fetchTelemetryRows(forceRefresh = false) {
       allRows = allRows.concat(data);
       if (data.length < pageSize) break;
       page++;
-      // Guard against infinite loop
       if (page > 20) break;
     }
 
@@ -49,18 +52,18 @@ async function fetchTelemetryRows(forceRefresh = false) {
     lastFetchTime = Date.now();
     return allRows;
   } catch (err) {
-    console.error('[Seller Analytics] Error fetching telemetry:', err);
+    console.error('[FragDashboard] Error loading telemetry:', err);
     return cachedAllLogs || [];
   }
 }
 
 /**
- * Filter telemetry rows by date bounds
+ * Filter telemetry rows by timeline preset or custom date range
  */
 function filterRowsByDate(rows, preset = '30d', customStart = null, customEnd = null) {
   const now = new Date();
   let startTime = null;
-  let endTime = new Date(now.getTime() + 86400000); // end of current day buffer
+  let endTime = new Date(now.getTime() + 86400000); // include current day buffer
 
   if (preset === 'today') {
     const today = new Date(now);
@@ -91,228 +94,196 @@ function filterRowsByDate(rows, preset = '30d', customStart = null, customEnd = 
 }
 
 /**
- * Parse a raw telemetry row into a typed event
+ * Compute demand intelligence metrics for sellers
  */
-function parseTelemetryRow(row) {
-  const title = (row.umbrella_title || '').trim();
-  const season = (row.umbrella_season || '').trim();
-  const liked = row.liked_perfumes;
-
-  if (title === 'EVENT:session_visit') {
-    let payload = {};
-    if (Array.isArray(liked) && liked[0] && typeof liked[0] === 'object') {
-      payload = liked[0];
-    }
-    return {
-      type: 'session_visit',
-      createdAt: row.created_at,
-      sessionId: row.session_id,
-      referrer: season || 'direct',
-      source: payload.source || 'direct',
-      utmSource: payload.utm_source || null,
-      utmCampaign: payload.utm_campaign || null
-    };
-  }
-
-  if (title === 'EVENT:search_query') {
-    let resultCount = 0;
-    if (Array.isArray(liked) && liked[0] && typeof liked[0].result_count === 'number') {
-      resultCount = liked[0].result_count;
-    }
-    return {
-      type: 'search_query',
-      createdAt: row.created_at,
-      sessionId: row.session_id,
-      query: (season || '').toLowerCase().trim(),
-      resultCount
-    };
-  }
-
-  if (title === 'EVENT:whatsapp_click') {
-    let payload = {};
-    if (Array.isArray(liked) && liked[0] && typeof liked[0] === 'object') {
-      payload = liked[0];
-    }
-    return {
-      type: 'whatsapp_click',
-      createdAt: row.created_at,
-      sessionId: row.session_id,
-      perfume: season || payload.perfume_name || 'Unknown Perfume',
-      seller: payload.seller_name || 'Unknown Seller',
-      format: (payload.format || 'retail').toLowerCase(),
-      price: payload.price || null
-    };
-  }
-
-  return null;
-}
-
-/**
- * Compute comprehensive analytics metrics for a date range and optional seller filter
- */
-export async function getSellerDashboardMetrics({
+export async function getSellerDemandMetrics({
   preset = '30d',
   customStart = null,
   customEnd = null,
-  selectedSeller = 'all',
   forceRefresh = false
 } = {}) {
   const rawRows = await fetchTelemetryRows(forceRefresh);
   const filteredRows = filterRowsByDate(rawRows, preset, customStart, customEnd);
 
-  // Group events
-  const visits = [];
-  const searches = [];
-  const leads = [];
-  const uniqueSessions = new Set();
-  const allKnownSellers = new Set([
-    'FragFever',
-    'AAR Fragrances',
-    'Enigma Perfumes',
-    'Second Theory',
-    'Apex Aroma',
-    'Whiff Culture',
-    'Sovereign Scents',
-    'Aromatic Rabbit',
-    'RP Decants',
-    'GRYV Scents',
-    'Blue Wings'
-  ]);
+  const sessionSearches = new Map();
+  const sessionClicks = new Map();
+  const searchMap = new Map();
+  const bottleClicks = [];
+  const decantClicks = [];
+  let totalSearchesCount = 0;
 
-  for (const row of filteredRows) {
-    if (row.session_id) uniqueSessions.add(row.session_id);
-    const parsed = parseTelemetryRow(row);
-    if (!parsed) continue;
+  for (const r of filteredRows) {
+    const title = (r.umbrella_title || '').trim();
+    const payload = Array.isArray(r.liked_perfumes) && r.liked_perfumes[0] ? r.liked_perfumes[0] : {};
+    const sess = r.session_id || 'anon';
 
-    if (parsed.type === 'session_visit') {
-      visits.push(parsed);
-    } else if (parsed.type === 'search_query') {
-      if (parsed.query && parsed.query.length >= 2) {
-        searches.push(parsed);
+    if (title === 'EVENT:search_query') {
+      const q = (payload.query || r.umbrella_season || '').toLowerCase().trim();
+      if (q && q.length >= 2 && !q.startsWith('anchor:')) {
+        totalSearchesCount++;
+        if (!sessionSearches.has(sess)) sessionSearches.set(sess, new Set());
+        sessionSearches.get(sess).add(q);
+
+        if (!searchMap.has(q)) {
+          searchMap.set(q, {
+            query: q,
+            searches: 0,
+            sessions: new Set(),
+            zeroResultCount: 0
+          });
+        }
+        const entry = searchMap.get(q);
+        entry.searches++;
+        entry.sessions.add(sess);
+        if (payload.results_count === 0) entry.zeroResultCount++;
       }
-    } else if (parsed.type === 'whatsapp_click') {
-      leads.push(parsed);
-      if (parsed.seller && parsed.seller !== 'Unknown Seller') {
-        allKnownSellers.add(parsed.seller);
+    } else if (title === 'EVENT:whatsapp_click') {
+      const format = (payload.format || r.umbrella_season || 'bottle').toLowerCase().trim();
+      const name = payload.name || payload.perfume_name || 'Unknown Fragrance';
+      const brand = payload.brand || '';
+      const price = payload.price || null;
+      const clickObj = {
+        name,
+        brand,
+        format,
+        price,
+        session: sess,
+        createdAt: r.created_at
+      };
+
+      if (!sessionClicks.has(sess)) sessionClicks.set(sess, []);
+      sessionClicks.get(sess).push(clickObj);
+
+      if (format.includes('decant')) {
+        decantClicks.push(clickObj);
+      } else {
+        bottleClicks.push(clickObj);
       }
     }
   }
 
-  // Filter leads if specific seller selected
-  const activeLeads = selectedSeller === 'all'
-    ? leads
-    : leads.filter(l => l.seller.toLowerCase() === selectedSeller.toLowerCase() || l.seller.toLowerCase().includes(selectedSeller.toLowerCase()));
+  const totalWhatsAppClicks = bottleClicks.length + decantClicks.length;
 
-  // 1. Top Search Queries (What Buyers Are Looking For)
-  const searchCounts = {};
-  for (const s of searches) {
-    searchCounts[s.query] = (searchCounts[s.query] || 0) + 1;
-  }
-  const topSearches = Object.entries(searchCounts)
-    .map(([query, count]) => ({
-      query,
-      count,
-      share: searches.length > 0 ? ((count / searches.length) * 100).toFixed(1) : '0.0'
-    }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 50);
+  // 1. Decant vs Full Bottle Split
+  const bottlePercentage = totalWhatsAppClicks > 0
+    ? ((bottleClicks.length / totalWhatsAppClicks) * 100).toFixed(1)
+    : '80.0';
+  const decantPercentage = totalWhatsAppClicks > 0
+    ? ((decantClicks.length / totalWhatsAppClicks) * 100).toFixed(1)
+    : '20.0';
 
-  // 2. WhatsApp Leads by Seller Breakdown
-  const sellerLeadCounts = {};
-  for (const l of leads) {
-    const sName = l.seller || 'Unspecified';
-    sellerLeadCounts[sName] = (sellerLeadCounts[sName] || 0) + 1;
-  }
-  const topSellers = Object.entries(sellerLeadCounts)
-    .map(([seller, count]) => ({
-      seller,
-      leads: count,
-      share: leads.length > 0 ? ((count / leads.length) * 100).toFixed(1) : '0.0'
-    }))
-    .sort((a, b) => b.leads - a.leads);
+  // 2. What People Are Searching For & WhatsApp Conversion
+  const searchInsights = [];
+  for (const [q, data] of searchMap.entries()) {
+    let whatsappClicksFromSearchers = 0;
+    for (const sess of data.sessions) {
+      if (sessionClicks.has(sess)) {
+        whatsappClicksFromSearchers += sessionClicks.get(sess).length;
+      }
+    }
+    const convertingShoppers = Array.from(data.sessions).filter(s => sessionClicks.has(s)).length;
+    const conversionRate = data.sessions.size > 0
+      ? ((convertingShoppers / data.sessions.size) * 100).toFixed(1)
+      : '0.0';
 
-  // 3. Top Demanded Perfumes (What Shoppers Click to Buy)
-  const perfumeDemandCounts = {};
-  for (const l of activeLeads) {
-    const pName = l.perfume || 'Unknown';
-    perfumeDemandCounts[pName] = (perfumeDemandCounts[pName] || 0) + 1;
+    searchInsights.push({
+      query: q,
+      searches: data.searches,
+      uniqueShoppers: data.sessions.size,
+      whatsappClicks: whatsappClicksFromSearchers,
+      conversionRate: parseFloat(conversionRate),
+      unmetDemand: data.zeroResultCount > 0,
+      share: totalSearchesCount > 0 ? ((data.searches / totalSearchesCount) * 100).toFixed(1) : '0.0'
+    });
   }
-  const topDemandedPerfumes = Object.entries(perfumeDemandCounts)
-    .map(([name, count]) => ({
-      name,
-      leads: count,
-      share: activeLeads.length > 0 ? ((count / activeLeads.length) * 100).toFixed(1) : '0.0'
+
+  // Sort by search volume descending
+  searchInsights.sort((a, b) => b.searches - a.searches);
+
+  // 3. Top Clicked Full Bottles
+  const bottleFreq = new Map();
+  for (const b of bottleClicks) {
+    const key = b.brand && !b.name.toLowerCase().includes(b.brand.toLowerCase())
+      ? `${b.brand} ${b.name}`
+      : b.name;
+    if (!bottleFreq.has(key)) {
+      bottleFreq.set(key, { name: key, brand: b.brand, clicks: 0, prices: [] });
+    }
+    const e = bottleFreq.get(key);
+    e.clicks++;
+    if (b.price) e.prices.push(b.price);
+  }
+
+  const topBottles = Array.from(bottleFreq.values())
+    .map(b => ({
+      name: b.name,
+      brand: b.brand,
+      clicks: b.clicks,
+      share: bottleClicks.length > 0 ? ((b.clicks / bottleClicks.length) * 100).toFixed(1) : '0.0',
+      avgPrice: b.prices.length > 0 ? Math.round(b.prices.reduce((acc, curr) => acc + curr, 0) / b.prices.length) : null
     }))
-    .sort((a, b) => b.leads - a.leads)
+    .sort((a, b) => b.clicks - a.clicks)
+    .slice(0, 40);
+
+  // 4. Top Clicked Decants
+  const decantFreq = new Map();
+  for (const d of decantClicks) {
+    const key = d.brand && !d.name.toLowerCase().includes(d.brand.toLowerCase())
+      ? `${d.brand} ${d.name}`
+      : d.name;
+    if (!decantFreq.has(key)) {
+      decantFreq.set(key, { name: key, brand: d.brand, clicks: 0, prices: [] });
+    }
+    const e = decantFreq.get(key);
+    e.clicks++;
+    if (d.price) e.prices.push(d.price);
+  }
+
+  const topDecants = Array.from(decantFreq.values())
+    .map(d => ({
+      name: d.name,
+      brand: d.brand,
+      clicks: d.clicks,
+      share: decantClicks.length > 0 ? ((d.clicks / decantClicks.length) * 100).toFixed(1) : '0.0',
+      avgPrice: d.prices.length > 0 ? Math.round(d.prices.reduce((acc, curr) => acc + curr, 0) / d.prices.length) : null
+    }))
+    .sort((a, b) => b.clicks - a.clicks)
     .slice(0, 30);
 
-  // 4. Bottle vs Decant Split
-  let bottleCount = 0;
-  let decantCount = 0;
-  for (const l of activeLeads) {
-    if (l.format === 'decant') decantCount++;
-    else bottleCount++;
-  }
-  const totalLeadsCount = activeLeads.length;
-  const bottlePercentage = totalLeadsCount > 0 ? ((bottleCount / totalLeadsCount) * 100).toFixed(1) : '80.0';
-  const decantPercentage = totalLeadsCount > 0 ? ((decantCount / totalLeadsCount) * 100).toFixed(1) : '20.0';
-
-  // 5. Daily Activity Velocity Trend (Day by Day)
+  // 5. Daily Search & Click Velocity
   const dayMap = {};
   const addDay = (dateStr, type) => {
     if (!dateStr) return;
     const d = new Date(dateStr);
     const dayKey = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     if (!dayMap[dayKey]) {
-      dayMap[dayKey] = { date: dayKey, rawDate: d, searches: 0, leads: 0, visits: 0 };
+      dayMap[dayKey] = { date: dayKey, rawDate: d, searches: 0, clicks: 0 };
     }
     if (type === 'search') dayMap[dayKey].searches++;
-    if (type === 'lead') dayMap[dayKey].leads++;
-    if (type === 'visit') dayMap[dayKey].visits++;
+    if (type === 'click') dayMap[dayKey].clicks++;
   };
 
-  searches.forEach(s => addDay(s.createdAt, 'search'));
-  activeLeads.forEach(l => addDay(l.createdAt, 'lead'));
-  visits.forEach(v => addDay(v.createdAt, 'visit'));
+  filteredRows.forEach(r => {
+    const title = (r.umbrella_title || '').trim();
+    if (title === 'EVENT:search_query') addDay(r.created_at, 'search');
+    if (title === 'EVENT:whatsapp_click') addDay(r.created_at, 'click');
+  });
 
-  const dailyTrends = Object.values(dayMap)
+  const dailyVelocity = Object.values(dayMap)
     .sort((a, b) => a.rawDate - b.rawDate)
-    .slice(-15); // Last 15 active days
-
-  // 6. Traffic Acquisition Channels
-  const sourceCounts = {};
-  for (const v of visits) {
-    const src = v.source || 'direct';
-    sourceCounts[src] = (sourceCounts[src] || 0) + 1;
-  }
-  const trafficSources = Object.entries(sourceCounts)
-    .map(([source, count]) => ({
-      source: source === 'reddit' ? 'Reddit (r/DesiFragranceAddicts)' : source,
-      count,
-      share: visits.length > 0 ? ((count / visits.length) * 100).toFixed(1) : '0.0'
-    }))
-    .sort((a, b) => b.count - a.count);
-
-  // 7. Overall Conversion Rate
-  const totalShoppers = uniqueSessions.size || 1;
-  const conversionRate = totalShoppers > 0 ? ((leads.length / totalShoppers) * 100).toFixed(2) : '0.00';
+    .slice(-14);
 
   return {
     dateRange: preset,
-    totalVisitors: uniqueSessions.size,
-    totalVisits: visits.length,
-    totalSearches: searches.length,
-    totalLeads: leads.length,
-    selectedSellerLeads: activeLeads.length,
-    conversionRate,
+    totalSearches: totalSearchesCount,
+    totalWhatsAppClicks,
+    totalBottleClicks: bottleClicks.length,
+    totalDecantClicks: decantClicks.length,
     bottlePercentage,
     decantPercentage,
-    formatBreakdown: { bottleCount, decantCount },
-    dailyTrends,
-    topSearches,
-    topSellers,
-    topDemandedPerfumes,
-    trafficSources,
-    sellersList: Array.from(allKnownSellers).sort()
+    searchInsights,
+    topBottles,
+    topDecants,
+    dailyVelocity
   };
 }
