@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { getSellerDemandMetrics } from '../services/sellerAnalyticsService.js';
 
-export default function SellerDashboard({ isDark, onToggleTheme }) {
+export default function SellerDashboard({ isDark, onToggleTheme, onSwitchToAdminView }) {
   const [datePreset, setDatePreset] = useState(() => {
     try {
       const p = new URLSearchParams(window.location.search).get('range');
@@ -175,6 +175,16 @@ export default function SellerDashboard({ isDark, onToggleTheme }) {
 
           {/* Action buttons */}
           <div className="flex items-center gap-2">
+            {onSwitchToAdminView && (
+              <button
+                onClick={onSwitchToAdminView}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-indigo-200 dark:border-indigo-800/80 bg-indigo-50 dark:bg-indigo-950/60 hover:border-indigo-400 text-xs font-mono font-bold text-indigo-700 dark:text-indigo-300 transition-colors shadow-2xs"
+                title="Switch to FragAdmin Executive Console"
+              >
+                <span>👑 FragAdmin Console →</span>
+              </button>
+            )}
+
             <button
               onClick={() => loadData(true)}
               disabled={loading}

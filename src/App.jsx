@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import SellerDashboard from './components/SellerDashboard';
+import FragAdminDashboard from './components/FragAdminDashboard';
 
 export default function App() {
+  const [currentView, setCurrentView] = useState('admin'); // 'admin' | 'seller'
   const [isDark, setIsDark] = useState(() => {
     try {
       return localStorage.getItem('theme') !== 'light';
@@ -22,10 +24,21 @@ export default function App() {
     } catch (e) {}
   }, [isDark]);
 
+  if (currentView === 'seller') {
+    return (
+      <SellerDashboard
+        isDark={isDark}
+        onToggleTheme={() => setIsDark(prev => !prev)}
+        onSwitchToAdminView={() => setCurrentView('admin')}
+      />
+    );
+  }
+
   return (
-    <SellerDashboard
+    <FragAdminDashboard
       isDark={isDark}
       onToggleTheme={() => setIsDark(prev => !prev)}
+      onSwitchToSellerView={() => setCurrentView('seller')}
     />
   );
 }
