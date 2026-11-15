@@ -14,9 +14,12 @@ import {
   AlertCircle,
   Sun,
   Moon,
-  ExternalLink,
-  Layers,
-  ArrowUpRight
+  Eye,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  SlidersHorizontal
 } from 'lucide-react';
 import { getSellerDemandMetrics } from '../services/sellerAnalyticsService.js';
 
@@ -34,6 +37,10 @@ export default function SellerDashboard({ isDark, onToggleTheme }) {
   const [searchFilter, setSearchFilter] = useState('');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(15);
 
   const [loading, setLoading] = useState(true);
   const [metrics, setMetrics] = useState(null);
@@ -60,7 +67,12 @@ export default function SellerDashboard({ isDark, onToggleTheme }) {
     loadData();
   }, [datePreset, customStart, customEnd]);
 
-  // Sync date preset to URL query params for shareability
+  // Reset page when filter, tab, or date changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, searchFilter, datePreset]);
+
+  // Sync date preset to URL query params
   useEffect(() => {
     try {
       const url = new URL(window.location.href);
@@ -78,7 +90,7 @@ export default function SellerDashboard({ isDark, onToggleTheme }) {
     } catch {}
   };
 
-  // Filtered search insights
+  // Filtered lists
   const filteredSearches = useMemo(() => {
     if (!metrics?.searchInsights) return [];
     if (!searchFilter.trim()) return metrics.searchInsights;
@@ -86,7 +98,6 @@ export default function SellerDashboard({ isDark, onToggleTheme }) {
     return metrics.searchInsights.filter(s => s.query.includes(q));
   }, [metrics?.searchInsights, searchFilter]);
 
-  // Filtered bottles
   const filteredBottles = useMemo(() => {
     if (!metrics?.topBottles) return [];
     if (!searchFilter.trim()) return metrics.topBottles;
@@ -94,13 +105,22 @@ export default function SellerDashboard({ isDark, onToggleTheme }) {
     return metrics.topBottles.filter(b => b.name.toLowerCase().includes(q));
   }, [metrics?.topBottles, searchFilter]);
 
-  // Filtered decants
   const filteredDecants = useMemo(() => {
     if (!metrics?.topDecants) return [];
     if (!searchFilter.trim()) return metrics.topDecants;
     const q = searchFilter.toLowerCase().trim();
     return metrics.topDecants.filter(d => d.name.toLowerCase().includes(q));
   }, [metrics?.topDecants, searchFilter]);
+
+  // Paginated slices
+  const activeDataset = activeTab === 'searches' ? filteredSearches : activeTab === 'bottles' ? filteredBottles : filteredDecants;
+  const totalItems = activeDataset.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  
+  const paginatedData = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return activeDataset.slice(start, start + pageSize);
+  }, [activeDataset, currentPage, pageSize]);
 
   // Peak activity day
   const peakDay = useMemo(() => {
@@ -135,7 +155,7 @@ export default function SellerDashboard({ isDark, onToggleTheme }) {
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono hidden sm:block">
-                What Indian fragrance buyers are searching for, clicking to buy, and bottle vs. decant split
+                What Indian buyers search for, card detail views, WhatsApp buy clicks, and bottle vs. decant split
               </p>
             </div>
           </div>
@@ -210,7 +230,7 @@ export default function SellerDashboard({ isDark, onToggleTheme }) {
           </div>
 
           <div className="text-[11px] font-mono text-slate-500 dark:text-slate-400 hidden sm:block">
-            {metrics ? `${metrics.totalSearches.toLocaleString()} searches • ${metrics.totalWhatsAppClicks} purchase clicks` : 'Loading live metrics...'}
+            {metrics ? `${metrics.totalSearches.toLocaleString()} searches • ${metrics.totalWhatsAppClicks} purchase leads` : 'Loading live metrics...'}
           </div>
         </div>
 
@@ -253,7 +273,21 @@ export default function SellerDashboard({ isDark, onToggleTheme }) {
               {metrics ? metrics.totalSearches.toLocaleString() : '...'}
             </p>
             <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 font-mono">
-              In-app queries from buyers looking to buy
+              In-app searches by buyers
+            </p>
+          </div>
+
+          {/* Card Detail Views / Opens */}
+          <div className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 shadow-2xs">
+            <div className="flex items-center justify-between text-slate-400 mb-1.5">
+              <span className="text-[11px] font-mono uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400">Card Opens / Views</span>
+              <Eye className="w-4 h-4 text-indigo-400" />
+            </div>
+            <p className="text-2xl sm:text-3xl font-extrabold font-mono text-indigo-600 dark:text-indigo-400">
+              {metrics ? (metrics.totalCardViews > 0 ? metrics.totalCardViews.toLocaleString() : 'Tracking Live') : '...'}
+            </p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 font-mono">
+              Shoppers exploring perfume details
             </p>
           </div>
 
@@ -267,17 +301,17 @@ export default function SellerDashboard({ isDark, onToggleTheme }) {
               {metrics ? metrics.totalWhatsAppClicks.toLocaleString() : '...'}
             </p>
             <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 font-mono">
-              Shoppers clicking "Buy on WhatsApp"
+              Direct contact to purchase
             </p>
           </div>
 
           {/* Full Bottles vs Decants Preference */}
-          <div className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 shadow-2xs sm:col-span-2">
+          <div className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 shadow-2xs">
             <div className="flex items-center justify-between text-slate-400 mb-1.5">
               <span className="text-[11px] font-mono uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400">
-                Buyer Format Split (Full Bottles vs Decants)
+                Bottles vs. Decants
               </span>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 <Package className="w-3.5 h-3.5 text-cyan-500" />
                 <FlaskConical className="w-3.5 h-3.5 text-amber-500" />
               </div>
@@ -288,22 +322,19 @@ export default function SellerDashboard({ isDark, onToggleTheme }) {
                 <span className="text-xl sm:text-2xl font-black text-cyan-600 dark:text-cyan-400">
                   {metrics ? `${metrics.bottlePercentage}%` : '...'}
                 </span>
-                <span className="text-xs text-slate-500 dark:text-slate-400 ml-1.5 font-medium">
-                  Full Bottles ({metrics?.totalBottleClicks || 0} leads)
-                </span>
+                <span className="text-[10px] text-slate-400 ml-1">Full</span>
               </div>
+              <span className="text-slate-300 dark:text-slate-700">/</span>
               <div>
                 <span className="text-lg sm:text-xl font-bold text-amber-500">
                   {metrics ? `${metrics.decantPercentage}%` : '...'}
                 </span>
-                <span className="text-xs text-slate-500 dark:text-slate-400 ml-1.5 font-medium">
-                  Decants ({metrics?.totalDecantClicks || 0} leads)
-                </span>
+                <span className="text-[10px] text-slate-400 ml-1">Decant</span>
               </div>
             </div>
 
             {/* Split progress bar */}
-            <div className="w-full bg-slate-200 dark:bg-slate-800 h-2.5 rounded-full overflow-hidden flex mt-2.5">
+            <div className="w-full bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden flex mt-2">
               <div
                 className="bg-cyan-500 h-full transition-all duration-500"
                 style={{ width: `${metrics?.bottlePercentage || 80}%` }}
@@ -315,9 +346,6 @@ export default function SellerDashboard({ isDark, onToggleTheme }) {
                 title={`Decants: ${metrics?.decantPercentage || 20}%`}
               />
             </div>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2 font-mono">
-              💡 8 out of 10 buyers look for retail bottles; decants surge for premium / blind-buy tests.
-            </p>
           </div>
 
         </div>
@@ -404,7 +432,7 @@ export default function SellerDashboard({ isDark, onToggleTheme }) {
           )}
         </div>
 
-        {/* 3. NAVIGATION TABS: WHAT PEOPLE SEARCH FOR vs TOP BOTTLES vs TOP DECANTS */}
+        {/* 3. NAVIGATION TABS & IN-TABLE FILTER */}
         <div className="space-y-4">
           
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
@@ -432,7 +460,7 @@ export default function SellerDashboard({ isDark, onToggleTheme }) {
                 }`}
               >
                 <Package className="w-3.5 h-3.5" />
-                <span>Top Clicked Full Bottles ({metrics?.topBottles?.length || 0})</span>
+                <span>Top Full Bottles ({metrics?.topBottles?.length || 0})</span>
               </button>
 
               <button
@@ -444,12 +472,12 @@ export default function SellerDashboard({ isDark, onToggleTheme }) {
                 }`}
               >
                 <FlaskConical className="w-3.5 h-3.5" />
-                <span>Top Clicked Decants ({metrics?.topDecants?.length || 0})</span>
+                <span>Top Decants ({metrics?.topDecants?.length || 0})</span>
               </button>
             </div>
 
             {/* In-table search filter */}
-            <div className="relative w-full sm:w-64">
+            <div className="relative w-full sm:w-72">
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
@@ -468,25 +496,51 @@ export default function SellerDashboard({ isDark, onToggleTheme }) {
 
           </div>
 
-          {/* TAB 1: WHAT BUYERS ARE SEARCHING FOR & WHATSAPP CONVERSION */}
-          {activeTab === 'searches' && (
-            <div className="bg-white dark:bg-slate-900/60 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-2xs">
-              
-              <div className="p-4 border-b border-slate-100 dark:border-slate-800/80 flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <h4 className="font-heading font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
-                    <Search className="w-4 h-4 text-cyan-500" />
-                    <span>Search Term Conversion Rate & WhatsApp Demand</span>
-                  </h4>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">
-                    For every search query: how many times searched, unique shoppers searching, and how many clicked WhatsApp to buy
-                  </p>
-                </div>
-                <div className="text-xs font-mono text-cyan-600 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-950/40 px-2.5 py-1 rounded-lg border border-cyan-200 dark:border-cyan-800/60">
-                  ⚡ High-intent restock targets
-                </div>
+          {/* MAIN DATA TABLE CONTAINER */}
+          <div className="bg-white dark:bg-slate-900/60 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-2xs">
+            
+            {/* Table Header Bar */}
+            <div className="p-4 border-b border-slate-100 dark:border-slate-800/80 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h4 className="font-heading font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+                  {activeTab === 'searches' && <Search className="w-4 h-4 text-cyan-500" />}
+                  {activeTab === 'bottles' && <Package className="w-4 h-4 text-cyan-500" />}
+                  {activeTab === 'decants' && <FlaskConical className="w-4 h-4 text-amber-500" />}
+                  <span>
+                    {activeTab === 'searches' && "Search Terms, Card Opens & WhatsApp Buy Intent"}
+                    {activeTab === 'bottles' && "Full Bottles Ranked by Customer WhatsApp Inquiries"}
+                    {activeTab === 'decants' && "Decants Ranked by Customer WhatsApp Inquiries"}
+                  </span>
+                </h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">
+                  {activeTab === 'searches' && "Tracks user searches, card detail views, and conversion to WhatsApp buy clicks"}
+                  {activeTab === 'bottles' && "Which specific retail bottles generate highest buy intent across community inventory"}
+                  {activeTab === 'decants' && "Which fragrances buyers want to sample in 5ml/10ml/30ml decants"}
+                </p>
               </div>
 
+              {/* Rows Per Page Selector */}
+              <div className="flex items-center gap-2 text-xs font-mono text-slate-500 dark:text-slate-400">
+                <SlidersHorizontal className="w-3.5 h-3.5 text-slate-400" />
+                <span>Rows:</span>
+                {[10, 15, 25, 50].map(sz => (
+                  <button
+                    key={sz}
+                    onClick={() => { setPageSize(sz); setCurrentPage(1); }}
+                    className={`px-2 py-0.5 rounded-md font-bold transition-colors ${
+                      pageSize === sz
+                        ? 'bg-cyan-500 text-white'
+                        : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    {sz}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* TAB 1: WHAT BUYERS ARE SEARCHING FOR */}
+            {activeTab === 'searches' && (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs font-mono">
                   <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
@@ -495,61 +549,68 @@ export default function SellerDashboard({ isDark, onToggleTheme }) {
                       <th className="py-3 px-4 font-semibold">Search Term</th>
                       <th className="py-3 px-4 font-semibold text-right">Search Volume</th>
                       <th className="py-3 px-4 font-semibold text-right">Unique Shoppers</th>
+                      <th className="py-3 px-4 font-semibold text-right text-indigo-500 dark:text-indigo-400">Card Opens</th>
                       <th className="py-3 px-4 font-semibold text-right text-emerald-600 dark:text-emerald-400">WhatsApp Buy Clicks</th>
                       <th className="py-3 px-4 font-semibold text-right">Search-to-Buy Rate</th>
                       <th className="py-3 px-4 font-semibold">Demand Signal</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                    {filteredSearches.length > 0 ? (
-                      filteredSearches.map((item, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/30 transition-colors">
-                          <td className="py-3 px-4 text-slate-400 font-bold">{idx + 1}</td>
-                          <td className="py-3 px-4 font-heading font-bold text-slate-800 dark:text-slate-200 text-sm capitalize">
-                            {item.query}
-                          </td>
-                          <td className="py-3 px-4 text-right font-extrabold text-slate-900 dark:text-white">
-                            {item.searches} <span className="text-[10px] text-slate-400 font-normal">({item.share}%)</span>
-                          </td>
-                          <td className="py-3 px-4 text-right text-slate-600 dark:text-slate-300">
-                            {item.uniqueShoppers}
-                          </td>
-                          <td className="py-3 px-4 text-right font-extrabold text-emerald-600 dark:text-emerald-400">
-                            {item.whatsappClicks} clicks
-                          </td>
-                          <td className="py-3 px-4 text-right">
-                            <span className={`px-2 py-0.5 rounded-md font-bold ${
-                              item.conversionRate >= 50
-                                ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
-                                : item.conversionRate >= 25
-                                ? 'bg-cyan-50 dark:bg-cyan-950/60 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800'
-                                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                            }`}>
-                              {item.conversionRate}%
-                            </span>
-                          </td>
-                          <td className="py-3 px-4">
-                            {item.unmetDemand ? (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-md border border-amber-200 dark:border-amber-800/50">
-                                <AlertCircle className="w-3 h-3 text-amber-500" />
-                                Unmet Demand / Low Stock
+                    {paginatedData.length > 0 ? (
+                      paginatedData.map((item, idx) => {
+                        const globalIdx = (currentPage - 1) * pageSize + idx + 1;
+                        return (
+                          <tr key={idx} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/30 transition-colors">
+                            <td className="py-3 px-4 text-slate-400 font-bold">{globalIdx}</td>
+                            <td className="py-3 px-4 font-heading font-bold text-slate-800 dark:text-slate-200 text-sm capitalize">
+                              {item.query}
+                            </td>
+                            <td className="py-3 px-4 text-right font-extrabold text-slate-900 dark:text-white">
+                              {item.searches} <span className="text-[10px] text-slate-400 font-normal">({item.share}%)</span>
+                            </td>
+                            <td className="py-3 px-4 text-right text-slate-600 dark:text-slate-300">
+                              {item.uniqueShoppers}
+                            </td>
+                            <td className="py-3 px-4 text-right font-semibold text-indigo-500 dark:text-indigo-400">
+                              {item.cardViews > 0 ? `${item.cardViews} views` : '—'}
+                            </td>
+                            <td className="py-3 px-4 text-right font-extrabold text-emerald-600 dark:text-emerald-400">
+                              {item.whatsappClicks} clicks
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              <span className={`px-2 py-0.5 rounded-md font-bold ${
+                                item.conversionRate >= 50
+                                  ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                                  : item.conversionRate >= 25
+                                  ? 'bg-cyan-50 dark:bg-cyan-950/60 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800'
+                                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                              }`}>
+                                {item.conversionRate}%
                               </span>
-                            ) : item.conversionRate >= 50 ? (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800/50">
-                                <Flame className="w-3 h-3 text-emerald-500" />
-                                High Conversion Target
-                              </span>
-                            ) : (
-                              <span className="text-[11px] text-slate-400">
-                                Regular Volume
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      ))
+                            </td>
+                            <td className="py-3 px-4">
+                              {item.unmetDemand ? (
+                                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-md border border-amber-200 dark:border-amber-800/50">
+                                  <AlertCircle className="w-3 h-3 text-amber-500" />
+                                  Unmet Demand / Low Stock
+                                </span>
+                              ) : item.conversionRate >= 50 ? (
+                                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800/50">
+                                  <Flame className="w-3 h-3 text-emerald-500" />
+                                  High Conversion Target
+                                </span>
+                              ) : (
+                                <span className="text-[11px] text-slate-400">
+                                  Regular Demand
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
                     ) : (
                       <tr>
-                        <td colSpan={7} className="py-12 text-center text-slate-400">
+                        <td colSpan={8} className="py-12 text-center text-slate-400">
                           No matching search queries found.
                         </td>
                       </tr>
@@ -557,89 +618,77 @@ export default function SellerDashboard({ isDark, onToggleTheme }) {
                   </tbody>
                 </table>
               </div>
+            )}
 
-            </div>
-          )}
-
-          {/* TAB 2: WHICH BOTTLES ARE PEOPLE CLICKING ON MOST */}
-          {activeTab === 'bottles' && (
-            <div className="bg-white dark:bg-slate-900/60 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-2xs">
-              
-              <div className="p-4 border-b border-slate-100 dark:border-slate-800/80 flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <h4 className="font-heading font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
-                    <Package className="w-4 h-4 text-cyan-500" />
-                    <span>Top Clicked Full Bottles (Customer WhatsApp Inquiries)</span>
-                  </h4>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">
-                    Which exact retail bottles buyers click "Buy on WhatsApp" to purchase most frequently
-                  </p>
-                </div>
-                <div className="text-xs font-mono text-cyan-600 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-950/40 px-2.5 py-1 rounded-lg border border-cyan-200 dark:border-cyan-800/60">
-                  {metrics?.totalBottleClicks || 0} Total Bottle Buy Inquiries
-                </div>
-              </div>
-
+            {/* TAB 2: TOP FULL BOTTLES */}
+            {activeTab === 'bottles' && (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs font-mono">
                   <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
                     <tr>
                       <th className="py-3 px-4 font-semibold">Rank</th>
                       <th className="py-3 px-4 font-semibold">Perfume Name</th>
-                      <th className="py-3 px-4 font-semibold text-right text-emerald-600 dark:text-emerald-400">WhatsApp Buy Clicks</th>
-                      <th className="py-3 px-4 font-semibold text-right">Bottle Market Share</th>
+                      <th className="py-3 px-4 font-semibold text-right text-indigo-500 dark:text-indigo-400">Card Opens</th>
+                      <th className="py-3 px-4 font-semibold text-right text-emerald-600 dark:text-emerald-400">WhatsApp Buy Leads</th>
+                      <th className="py-3 px-4 font-semibold text-right">Market Share</th>
                       <th className="py-3 px-4 font-semibold text-right">Avg Clicked Price</th>
-                      <th className="py-3 px-4 font-semibold">Demand Velocity</th>
+                      <th className="py-3 px-4 font-semibold">Demand Signal</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                    {filteredBottles.length > 0 ? (
-                      filteredBottles.map((item, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/30 transition-colors">
-                          <td className="py-3 px-4 text-slate-400 font-bold">
-                            <span className={`w-5 h-5 rounded-md inline-flex items-center justify-center font-bold text-[11px] ${
-                              idx === 0 ? 'bg-amber-500/20 text-amber-500 border border-amber-500/40' :
-                              idx === 1 ? 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200' :
-                              idx === 2 ? 'bg-amber-700/20 text-amber-700 dark:text-amber-300' :
-                              'bg-slate-100 dark:bg-slate-800 text-slate-400'
-                            }`}>
-                              {idx + 1}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 font-heading font-bold text-slate-800 dark:text-slate-200 text-sm">
-                            {item.name}
-                          </td>
-                          <td className="py-3 px-4 text-right font-extrabold text-emerald-600 dark:text-emerald-400 text-sm">
-                            {item.clicks} leads
-                          </td>
-                          <td className="py-3 px-4 text-right font-bold text-slate-700 dark:text-slate-300">
-                            {item.share}%
-                          </td>
-                          <td className="py-3 px-4 text-right text-slate-600 dark:text-slate-300">
-                            {item.avgPrice ? `₹${item.avgPrice.toLocaleString()}` : '—'}
-                          </td>
-                          <td className="py-3 px-4">
-                            {idx < 3 ? (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-md border border-amber-200 dark:border-amber-800/50">
-                                <Flame className="w-3 h-3 text-amber-500" />
-                                Top Seller (#1-3)
+                    {paginatedData.length > 0 ? (
+                      paginatedData.map((item, idx) => {
+                        const globalIdx = (currentPage - 1) * pageSize + idx + 1;
+                        return (
+                          <tr key={idx} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/30 transition-colors">
+                            <td className="py-3 px-4 text-slate-400 font-bold">
+                              <span className={`w-5 h-5 rounded-md inline-flex items-center justify-center font-bold text-[11px] ${
+                                globalIdx === 1 ? 'bg-amber-500/20 text-amber-500 border border-amber-500/40' :
+                                globalIdx === 2 ? 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200' :
+                                globalIdx === 3 ? 'bg-amber-700/20 text-amber-700 dark:text-amber-300' :
+                                'bg-slate-100 dark:bg-slate-800 text-slate-400'
+                              }`}>
+                                {globalIdx}
                               </span>
-                            ) : item.clicks >= 6 ? (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-cyan-600 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-950/40 px-2 py-0.5 rounded-md border border-cyan-200 dark:border-cyan-800/50">
-                                <TrendingUp className="w-3 h-3 text-cyan-500" />
-                                Fast Mover
-                              </span>
-                            ) : (
-                              <span className="text-[11px] text-slate-400">
-                                Consistent Interest
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      ))
+                            </td>
+                            <td className="py-3 px-4 font-heading font-bold text-slate-800 dark:text-slate-200 text-sm">
+                              {item.name}
+                            </td>
+                            <td className="py-3 px-4 text-right font-semibold text-indigo-500 dark:text-indigo-400">
+                              {item.cardViews > 0 ? `${item.cardViews} views` : '—'}
+                            </td>
+                            <td className="py-3 px-4 text-right font-extrabold text-emerald-600 dark:text-emerald-400 text-sm">
+                              {item.clicks} leads
+                            </td>
+                            <td className="py-3 px-4 text-right font-bold text-slate-700 dark:text-slate-300">
+                              {item.share}%
+                            </td>
+                            <td className="py-3 px-4 text-right text-slate-600 dark:text-slate-300">
+                              {item.avgPrice ? `₹${item.avgPrice.toLocaleString()}` : '—'}
+                            </td>
+                            <td className="py-3 px-4">
+                              {globalIdx <= 3 ? (
+                                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-md border border-amber-200 dark:border-amber-800/50">
+                                  <Flame className="w-3 h-3 text-amber-500" />
+                                  Top Seller (#1-3)
+                                </span>
+                              ) : item.clicks >= 6 ? (
+                                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-cyan-600 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-950/40 px-2 py-0.5 rounded-md border border-cyan-200 dark:border-cyan-800/50">
+                                  <TrendingUp className="w-3 h-3 text-cyan-500" />
+                                  Fast Mover
+                                </span>
+                              ) : (
+                                <span className="text-[11px] text-slate-400">
+                                  Steady Interest
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
                     ) : (
                       <tr>
-                        <td colSpan={6} className="py-12 text-center text-slate-400">
+                        <td colSpan={7} className="py-12 text-center text-slate-400">
                           No matching bottles found.
                         </td>
                       </tr>
@@ -647,35 +696,17 @@ export default function SellerDashboard({ isDark, onToggleTheme }) {
                   </tbody>
                 </table>
               </div>
+            )}
 
-            </div>
-          )}
-
-          {/* TAB 3: WHICH DECANTS ARE PEOPLE CLICKING ON MOST */}
-          {activeTab === 'decants' && (
-            <div className="bg-white dark:bg-slate-900/60 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-2xs">
-              
-              <div className="p-4 border-b border-slate-100 dark:border-slate-800/80 flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <h4 className="font-heading font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
-                    <FlaskConical className="w-4 h-4 text-amber-500" />
-                    <span>Top Clicked Decants (Sample & Trial Demand)</span>
-                  </h4>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">
-                    Which fragrances buyers want to test in 5ml/10ml/30ml decants before committing to full bottles
-                  </p>
-                </div>
-                <div className="text-xs font-mono text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-lg border border-amber-200 dark:border-amber-800/60">
-                  {metrics?.totalDecantClicks || 0} Total Decant Inquiries
-                </div>
-              </div>
-
+            {/* TAB 3: TOP DECANTS */}
+            {activeTab === 'decants' && (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs font-mono">
                   <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
                     <tr>
                       <th className="py-3 px-4 font-semibold">Rank</th>
                       <th className="py-3 px-4 font-semibold">Perfume Name</th>
+                      <th className="py-3 px-4 font-semibold text-right text-indigo-500 dark:text-indigo-400">Card Opens</th>
                       <th className="py-3 px-4 font-semibold text-right text-emerald-600 dark:text-emerald-400">WhatsApp Decant Clicks</th>
                       <th className="py-3 px-4 font-semibold text-right">Decant Market Share</th>
                       <th className="py-3 px-4 font-semibold text-right">Avg Clicked Price</th>
@@ -683,47 +714,53 @@ export default function SellerDashboard({ isDark, onToggleTheme }) {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                    {filteredDecants.length > 0 ? (
-                      filteredDecants.map((item, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/30 transition-colors">
-                          <td className="py-3 px-4 text-slate-400 font-bold">
-                            <span className={`w-5 h-5 rounded-md inline-flex items-center justify-center font-bold text-[11px] ${
-                              idx === 0 ? 'bg-amber-500/20 text-amber-500 border border-amber-500/40' :
-                              idx === 1 ? 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200' :
-                              'bg-slate-100 dark:bg-slate-800 text-slate-400'
-                            }`}>
-                              {idx + 1}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 font-heading font-bold text-slate-800 dark:text-slate-200 text-sm">
-                            {item.name}
-                          </td>
-                          <td className="py-3 px-4 text-right font-extrabold text-emerald-600 dark:text-emerald-400 text-sm">
-                            {item.clicks} leads
-                          </td>
-                          <td className="py-3 px-4 text-right font-bold text-slate-700 dark:text-slate-300">
-                            {item.share}%
-                          </td>
-                          <td className="py-3 px-4 text-right text-slate-600 dark:text-slate-300">
-                            {item.avgPrice ? `₹${item.avgPrice.toLocaleString()}` : '—'}
-                          </td>
-                          <td className="py-3 px-4">
-                            {idx < 2 ? (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-md border border-amber-200 dark:border-amber-800/50">
-                                <Sparkles className="w-3 h-3 text-amber-500" />
-                                High Test Demand
+                    {paginatedData.length > 0 ? (
+                      paginatedData.map((item, idx) => {
+                        const globalIdx = (currentPage - 1) * pageSize + idx + 1;
+                        return (
+                          <tr key={idx} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/30 transition-colors">
+                            <td className="py-3 px-4 text-slate-400 font-bold">
+                              <span className={`w-5 h-5 rounded-md inline-flex items-center justify-center font-bold text-[11px] ${
+                                globalIdx === 1 ? 'bg-amber-500/20 text-amber-500 border border-amber-500/40' :
+                                globalIdx === 2 ? 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200' :
+                                'bg-slate-100 dark:bg-slate-800 text-slate-400'
+                              }`}>
+                                {globalIdx}
                               </span>
-                            ) : (
-                              <span className="text-[11px] text-slate-400">
-                                Steady Decant Trials
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      ))
+                            </td>
+                            <td className="py-3 px-4 font-heading font-bold text-slate-800 dark:text-slate-200 text-sm">
+                              {item.name}
+                            </td>
+                            <td className="py-3 px-4 text-right font-semibold text-indigo-500 dark:text-indigo-400">
+                              {item.cardViews > 0 ? `${item.cardViews} views` : '—'}
+                            </td>
+                            <td className="py-3 px-4 text-right font-extrabold text-emerald-600 dark:text-emerald-400 text-sm">
+                              {item.clicks} leads
+                            </td>
+                            <td className="py-3 px-4 text-right font-bold text-slate-700 dark:text-slate-300">
+                              {item.share}%
+                            </td>
+                            <td className="py-3 px-4 text-right text-slate-600 dark:text-slate-300">
+                              {item.avgPrice ? `₹${item.avgPrice.toLocaleString()}` : '—'}
+                            </td>
+                            <td className="py-3 px-4">
+                              {globalIdx <= 2 ? (
+                                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-md border border-amber-200 dark:border-amber-800/50">
+                                  <Sparkles className="w-3 h-3 text-amber-500" />
+                                  High Sample Demand
+                                </span>
+                              ) : (
+                                <span className="text-[11px] text-slate-400">
+                                  Steady Decant Trials
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
                     ) : (
                       <tr>
-                        <td colSpan={6} className="py-12 text-center text-slate-400">
+                        <td colSpan={7} className="py-12 text-center text-slate-400">
                           No matching decants found.
                         </td>
                       </tr>
@@ -731,9 +768,71 @@ export default function SellerDashboard({ isDark, onToggleTheme }) {
                   </tbody>
                 </table>
               </div>
+            )}
 
-            </div>
-          )}
+            {/* PAGINATION CONTROLS FOOTER */}
+            {totalItems > 0 && (
+              <div className="p-4 bg-slate-50 dark:bg-slate-800/40 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
+                
+                {/* Status count */}
+                <div className="text-slate-500 dark:text-slate-400">
+                  Showing <strong>{(currentPage - 1) * pageSize + 1}</strong> to <strong>{Math.min(currentPage * pageSize, totalItems)}</strong> of <strong>{totalItems}</strong> entries
+                </div>
+
+                {/* Page Navigation Buttons */}
+                <div className="flex items-center gap-1.5 ml-auto">
+                  
+                  {/* First */}
+                  <button
+                    onClick={() => setCurrentPage(1)}
+                    disabled={currentPage === 1}
+                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 disabled:opacity-30 disabled:pointer-events-none hover:border-cyan-400 transition-colors"
+                    title="First Page"
+                  >
+                    <ChevronsLeft className="w-3.5 h-3.5" />
+                  </button>
+
+                  {/* Previous */}
+                  <button
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 disabled:opacity-30 disabled:pointer-events-none hover:border-cyan-400 transition-colors"
+                    title="Previous Page"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                  </button>
+
+                  {/* Page Indicator */}
+                  <span className="px-3 py-1 font-bold text-slate-700 dark:text-slate-300">
+                    Page {currentPage} of {totalPages}
+                  </span>
+
+                  {/* Next */}
+                  <button
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 disabled:opacity-30 disabled:pointer-events-none hover:border-cyan-400 transition-colors"
+                    title="Next Page"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+
+                  {/* Last */}
+                  <button
+                    onClick={() => setCurrentPage(totalPages)}
+                    disabled={currentPage === totalPages}
+                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 disabled:opacity-30 disabled:pointer-events-none hover:border-cyan-400 transition-colors"
+                    title="Last Page"
+                  >
+                    <ChevronsRight className="w-3.5 h-3.5" />
+                  </button>
+
+                </div>
+
+              </div>
+            )}
+
+          </div>
 
         </div>
 
@@ -742,11 +841,11 @@ export default function SellerDashboard({ isDark, onToggleTheme }) {
           <div className="flex items-center gap-2 text-cyan-900 dark:text-cyan-200">
             <Sparkles className="w-4 h-4 text-cyan-500 shrink-0" />
             <span>
-              <strong>Key Restock Rule:</strong> Bottles with &gt;50% search-to-buy rate (e.g. <em>Hawas Ice</em>, <em>Afnan 9 PM</em>, <em>Marwa</em>) generate the highest return per unit stocked.
+              <strong>Seller Insight:</strong> High card opens + high search-to-buy rate identifies fast-turnover inventory. Stocking items like <em>Hawas Ice</em>, <em>9 PM</em>, and <em>Liquid Brun</em> produces the quickest sales velocity.
             </span>
           </div>
           <span className="text-slate-400 text-[11px]">
-            Data powered by live community shopper telemetry
+            Real-time telemetry from FragScanner shoppers
           </span>
         </div>
 

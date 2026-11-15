@@ -1,9 +1,10 @@
 /**
  * sellerAnalyticsService.js
  * 
- * Aggregates live buyer search demand and WhatsApp conversion telemetry for sellers.
+ * Aggregates live buyer search demand, card views / opens, and WhatsApp conversion telemetry.
  * Focuses strictly on:
- * - What people are searching for & their WhatsApp click conversion
+ * - What people are searching for & their search-to-card and search-to-buy rates
+ * - Card Opens / Views per fragrance (what shoppers are exploring)
  * - Decant vs Full Bottle market demand split
  * - Which specific bottles buyers are clicking on most
  * - Which specific decants buyers are clicking on most
@@ -107,9 +108,11 @@ export async function getSellerDemandMetrics({
 
   const sessionSearches = new Map();
   const sessionClicks = new Map();
+  const sessionCardViews = new Map();
   const searchMap = new Map();
   const bottleClicks = [];
   const decantClicks = [];
+  const cardViews = [];
   let totalSearchesCount = 0;
 
   for (const r of filteredRows) {
@@ -137,6 +140,23 @@ export async function getSellerDemandMetrics({
         entry.sessions.add(sess);
         if (payload.results_count === 0) entry.zeroResultCount++;
       }
+    } else if (title === 'EVENT:card_click') {
+      const format = (payload.format || r.umbrella_season || 'bottle').toLowerCase().trim();
+      const name = payload.name || payload.fragrance_name || 'Unknown Fragrance';
+      const brand = payload.brand || '';
+      const price = payload.price || null;
+      const viewObj = {
+        name,
+        brand,
+        format,
+        price,
+        session: sess,
+        createdAt: r.created_at
+      };
+
+      if (!sessionCardViews.has(sess)) sessionCardViews.set(sess, []);
+      sessionCardViews.get(sess).push(viewObj);
+      cardViews.push(viewObj);
     } else if (title === 'EVENT:whatsapp_click') {
       const format = (payload.format || r.umbrella_season || 'bottle').toLowerCase().trim();
       const name = payload.name || payload.perfume_name || 'Unknown Fragrance';
@@ -163,6 +183,7 @@ export async function getSellerDemandMetrics({
   }
 
   const totalWhatsAppClicks = bottleClicks.length + decantClicks.length;
+  const totalCardViews = cardViews.length;
 
   // 1. Decant vs Full Bottle Split
   const bottlePercentage = totalWhatsAppClicks > 0
@@ -172,13 +193,27 @@ export async function getSellerDemandMetrics({
     ? ((decantClicks.length / totalWhatsAppClicks) * 100).toFixed(1)
     : '20.0';
 
+  // Card Views by fragrance lookup
+  const cardViewsByFragrance = new Map();
+  for (const cv of cardViews) {
+    const key = cv.brand && !cv.name.toLowerCase().includes(cv.brand.toLowerCase())
+      ? `${cv.brand} ${cv.name}`
+      : cv.name;
+    cardViewsByFragrance.set(key, (cardViewsByFragrance.get(key) || 0) + 1);
+  }
+
   // 2. What People Are Searching For & WhatsApp Conversion
   const searchInsights = [];
   for (const [q, data] of searchMap.entries()) {
     let whatsappClicksFromSearchers = 0;
+    let cardViewsFromSearchers = 0;
+
     for (const sess of data.sessions) {
       if (sessionClicks.has(sess)) {
         whatsappClicksFromSearchers += sessionClicks.get(sess).length;
+      }
+      if (sessionCardViews.has(sess)) {
+        cardViewsFromSearchers += sessionCardViews.get(sess).length;
       }
     }
     const convertingShoppers = Array.from(data.sessions).filter(s => sessionClicks.has(s)).length;
@@ -190,6 +225,7 @@ export async function getSellerDemandMetrics({
       query: q,
       searches: data.searches,
       uniqueShoppers: data.sessions.size,
+      cardViews: cardViewsFromSearchers,
       whatsappClicks: whatsappClicksFromSearchers,
       conversionRate: parseFloat(conversionRate),
       unmetDemand: data.zeroResultCount > 0,
@@ -214,16 +250,27 @@ export async function getSellerDemandMetrics({
     if (b.price) e.prices.push(b.price);
   }
 
+  // Also include bottles that have card views even if WhatsApp clicks are low
+  for (const [fragName, views] of cardViewsByFragrance.entries()) {
+    if (!bottleFreq.has(fragName)) {
+      bottleFreq.set(fragName, { name: fragName, brand: '', clicks: 0, prices: [] });
+    }
+  }
+
   const topBottles = Array.from(bottleFreq.values())
-    .map(b => ({
-      name: b.name,
-      brand: b.brand,
-      clicks: b.clicks,
-      share: bottleClicks.length > 0 ? ((b.clicks / bottleClicks.length) * 100).toFixed(1) : '0.0',
-      avgPrice: b.prices.length > 0 ? Math.round(b.prices.reduce((acc, curr) => acc + curr, 0) / b.prices.length) : null
-    }))
-    .sort((a, b) => b.clicks - a.clicks)
-    .slice(0, 40);
+    .map(b => {
+      const views = cardViewsByFragrance.get(b.name) || 0;
+      return {
+        name: b.name,
+        brand: b.brand,
+        cardViews: views,
+        clicks: b.clicks,
+        share: bottleClicks.length > 0 ? ((b.clicks / bottleClicks.length) * 100).toFixed(1) : '0.0',
+        avgPrice: b.prices.length > 0 ? Math.round(b.prices.reduce((acc, curr) => acc + curr, 0) / b.prices.length) : null,
+        viewToBuyRate: views > 0 ? ((b.clicks / views) * 100).toFixed(1) : null
+      };
+    })
+    .sort((a, b) => b.clicks !== a.clicks ? b.clicks - a.clicks : b.cardViews - a.cardViews);
 
   // 4. Top Clicked Decants
   const decantFreq = new Map();
@@ -240,15 +287,19 @@ export async function getSellerDemandMetrics({
   }
 
   const topDecants = Array.from(decantFreq.values())
-    .map(d => ({
-      name: d.name,
-      brand: d.brand,
-      clicks: d.clicks,
-      share: decantClicks.length > 0 ? ((d.clicks / decantClicks.length) * 100).toFixed(1) : '0.0',
-      avgPrice: d.prices.length > 0 ? Math.round(d.prices.reduce((acc, curr) => acc + curr, 0) / d.prices.length) : null
-    }))
-    .sort((a, b) => b.clicks - a.clicks)
-    .slice(0, 30);
+    .map(d => {
+      const views = cardViewsByFragrance.get(d.name) || 0;
+      return {
+        name: d.name,
+        brand: d.brand,
+        cardViews: views,
+        clicks: d.clicks,
+        share: decantClicks.length > 0 ? ((d.clicks / decantClicks.length) * 100).toFixed(1) : '0.0',
+        avgPrice: d.prices.length > 0 ? Math.round(d.prices.reduce((acc, curr) => acc + curr, 0) / d.prices.length) : null,
+        viewToBuyRate: views > 0 ? ((d.clicks / views) * 100).toFixed(1) : null
+      };
+    })
+    .sort((a, b) => b.clicks !== a.clicks ? b.clicks - a.clicks : b.cardViews - a.cardViews);
 
   // 5. Daily Search & Click Velocity
   const dayMap = {};
@@ -257,16 +308,18 @@ export async function getSellerDemandMetrics({
     const d = new Date(dateStr);
     const dayKey = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     if (!dayMap[dayKey]) {
-      dayMap[dayKey] = { date: dayKey, rawDate: d, searches: 0, clicks: 0 };
+      dayMap[dayKey] = { date: dayKey, rawDate: d, searches: 0, clicks: 0, views: 0 };
     }
     if (type === 'search') dayMap[dayKey].searches++;
     if (type === 'click') dayMap[dayKey].clicks++;
+    if (type === 'view') dayMap[dayKey].views++;
   };
 
   filteredRows.forEach(r => {
     const title = (r.umbrella_title || '').trim();
     if (title === 'EVENT:search_query') addDay(r.created_at, 'search');
     if (title === 'EVENT:whatsapp_click') addDay(r.created_at, 'click');
+    if (title === 'EVENT:card_click') addDay(r.created_at, 'view');
   });
 
   const dailyVelocity = Object.values(dayMap)
@@ -276,6 +329,7 @@ export async function getSellerDemandMetrics({
   return {
     dateRange: preset,
     totalSearches: totalSearchesCount,
+    totalCardViews,
     totalWhatsAppClicks,
     totalBottleClicks: bottleClicks.length,
     totalDecantClicks: decantClicks.length,
