@@ -58,6 +58,14 @@ async function fetchTelemetryRows(forceRefresh = false) {
   }
 }
 
+function normalizePerfumeKey(str) {
+  if (!str) return '';
+  return str.toLowerCase()
+    .replace(/\b(for him|for men|for women|edp|edt|parfum|extrait)\b/gi, '')
+    .replace(/[^a-z0-9]/gi, '')
+    .trim();
+}
+
 /**
  * Filter telemetry rows by timeline preset or custom date range
  */
@@ -193,13 +201,17 @@ export async function getSellerDemandMetrics({
     ? ((decantClicks.length / totalWhatsAppClicks) * 100).toFixed(1)
     : '20.0';
 
-  // Card Views by fragrance lookup
+  // Card Views by fragrance lookup (fuzzy normalized)
   const cardViewsByFragrance = new Map();
+  const cardViewsNormalized = new Map();
   for (const cv of cardViews) {
-    const key = cv.brand && !cv.name.toLowerCase().includes(cv.brand.toLowerCase())
+    const rawKey = cv.brand && !cv.name.toLowerCase().includes(cv.brand.toLowerCase())
       ? `${cv.brand} ${cv.name}`
       : cv.name;
-    cardViewsByFragrance.set(key, (cardViewsByFragrance.get(key) || 0) + 1);
+    cardViewsByFragrance.set(rawKey, (cardViewsByFragrance.get(rawKey) || 0) + 1);
+
+    const normKey = normalizePerfumeKey(`${cv.brand} ${cv.name}`);
+    cardViewsNormalized.set(normKey, (cardViewsNormalized.get(normKey) || 0) + 1);
   }
 
   // 2. What People Are Searching For & WhatsApp Conversion
@@ -259,7 +271,10 @@ export async function getSellerDemandMetrics({
 
   const topBottles = Array.from(bottleFreq.values())
     .map(b => {
-      const views = cardViewsByFragrance.get(b.name) || 0;
+      const views = cardViewsByFragrance.get(b.name) 
+        || cardViewsNormalized.get(normalizePerfumeKey(b.name))
+        || cardViewsNormalized.get(normalizePerfumeKey(`${b.brand} ${b.name}`))
+        || 0;
       return {
         name: b.name,
         brand: b.brand,
@@ -288,7 +303,10 @@ export async function getSellerDemandMetrics({
 
   const topDecants = Array.from(decantFreq.values())
     .map(d => {
-      const views = cardViewsByFragrance.get(d.name) || 0;
+      const views = cardViewsByFragrance.get(d.name)
+        || cardViewsNormalized.get(normalizePerfumeKey(d.name))
+        || cardViewsNormalized.get(normalizePerfumeKey(`${d.brand} ${d.name}`))
+        || 0;
       return {
         name: d.name,
         brand: d.brand,
