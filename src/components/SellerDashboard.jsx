@@ -1046,7 +1046,7 @@ export default function SellerDashboard({ isDark, onToggleTheme }) {
             </span>
           </div>
           <span className="text-slate-400 text-[11px]">
-            Real-time telemetry from FragScanner shoppers
+            Real-time telemetry from FragSeeker shoppers
           </span>
         </div>
 
